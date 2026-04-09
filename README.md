@@ -44,16 +44,69 @@ Raw Material Storage (Silo)
 
 ### Physical Equipment in the Factory
 
-| Equipment | Blueprint | What It Does |
-|---|---|---|
-| **Silo** | `BP_Silo` | Stores raw materials. Has a fluid level that drops as material is consumed. |
-| **Reactor** | `BP_Reactor` | The main processing vessel where the recipe is carried out. Tracks its own fluid level and state. |
-| **Pump** | `BP_Pump` | Moves fluid from the Silo into the Reactor. Can be turned on/off. |
-| **Valve** | `BP_Valve` | Controls which path fluid flows through. Can be opened or closed. |
-| **Pipes** | `BP_PipeVisualOnly` | Visual-only connections between equipment. Carry no logic — the pump and valves control actual flow. |
-| **Emergency Stop** | `BP_Emergency_Stop` | A large red button that immediately halts all production and resets equipment states. |
+#### Silo — `BP_Silo`
+The starting point of every production run. The Silo is a large cylindrical storage tank that holds **raw materials** before they are processed.
 
-Fluid levels are visualised using **Niagara particle effects** (`NS_FluidLevel`) — liquid visually rises and falls in the Silo and Reactor as production runs.
+- Tracks a **fluid level** that drops as material is pumped out
+- The `WBP_FluidLevels` screen shows its current fill percentage in real time
+- The Niagara effect `NS_FluidLevel` renders the liquid surface inside the tank visually
+- If the Silo runs empty mid-production, the pump has nothing to transfer — production stalls
+- The 3D model comes from the custom asset in `Content/silo/` (an `.fbx` the team imported themselves)
+
+#### Reactor — `BP_Reactor`
+The heart of the facility. Raw material pumped in from the Silo is **processed here according to the active recipe**.
+
+- Has its own **fluid level** that rises as material arrives and falls as the reaction completes
+- Tracks its own internal **state** (idle / filling / processing / done)
+- The recipe determines how long processing takes and under what conditions
+- Also visualised with `NS_FluidLevel` so the operator can watch the level change
+- Two reactor pipe connections exist: `Bp_pipe_straight_Silo_Reactor` (input) and `Bp_pipe_straight_Reactor_Silo` (output/return)
+
+#### Pump — `BP_Pump`
+Moves fluid from the Silo into the Reactor. Think of it as the engine that drives material transfer.
+
+- Has two states stored in `FSTR_PumpState`: **on** or **off**
+- The operator turns it on via the **Flow System screen** (`WBP_FlowSystem`) or by physically interacting with it in VR
+- When running, it shows visual feedback (the 3D model is an AC Motor from `Content/Fab/AC_Motor/`)
+- The pump only moves fluid — it does not process anything. Processing is the Reactor's job
+- Turning on the pump while a valve is closed in the wrong position does nothing — valves must be set first
+
+#### Valve — `BP_Valve`
+Controls **which path fluid can flow through** in the pipe network. Opening or closing valves directs material to the right destination.
+
+- Has two states stored in `FSTR_ValveState`: **open** or **closed**
+- Multiple valves exist in the level — each controls a different segment of the pipe network
+- The operator sets valve positions on the **Flow System screen** (`WBP_FlowSystem`) before starting the pump
+- Getting the valve configuration wrong means fluid goes to the wrong place or nowhere at all
+- The 3D model is the red valve from `Content/Fab/Iconic_Half-Life_red_valve/` — it physically rotates open/closed in VR
+
+#### Pipes — `BP_PipeVisualOnly`
+The visible connections between all equipment. **They carry no logic** — all flow control happens in the pump and valves. Pipes are purely cosmetic so the factory looks like a real plumbing system.
+
+Two named pipe segments exist for the main production circuit:
+- `Bp_pipe_straight_Silo_Reactor` — the input line from Silo to Reactor
+- `Bp_pipe_straight_Reactor_Silo` — the return/output line
+
+#### Emergency Stop — `BP_Emergency_Stop`
+A safety mechanism modelled on real industrial E-Stop systems. It is a large red button physically present in the factory.
+
+- When pressed, it **immediately halts all pumps** (sets all `FSTR_PumpState` to off)
+- **Resets all valves** to their safe default positions
+- **Cancels the active production run** — the order returns to pending
+- The `WBP_ESResetFlushInv` screen provides the same function from the monitor UI, and also adds options to **flush the system** (clear all fluid levels) and **reset inventory**
+- After an E-Stop the operator must reconfigure valves and restart the pump manually
+
+#### Facility Data Manager — `BP_FacilityDataManager`
+Not a physical piece of equipment — this is an invisible actor placed in the level that acts as the **central nervous system** of the simulation. All other components report their state to it and read data from it.
+
+- Stores every recipe in the database
+- Tracks every order (pending, active, completed)
+- Holds the live state of every pump and valve
+- The monitor UI reads from this actor to display information
+- Equipment actors write to this actor when their state changes
+- Nothing in the simulation talks to anything else directly — everything goes through this manager
+
+Fluid levels are visualised using the **Niagara particle system** `NS_FluidLevel` — liquid visually rises and falls in the Silo and Reactor as production runs. The VR laser pointer is a separate Niagara effect called `NS_VRBeam`.
 
 ---
 
