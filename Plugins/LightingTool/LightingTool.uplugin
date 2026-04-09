@@ -1,0 +1,52 @@
+{
+	"FileVersion": 3,
+	"Version": 4,
+	"VersionName": "1.2.1",
+	"FriendlyName": "Ultimate Lighting Tool",
+	"Description": "A set of utility tools created to speed up lighting and optimization processes.",
+	"Category": "Lighting",
+	"CreatedBy": "Leartes Studios",
+	"CreatedByURL": "https://leartesstudios.com",
+	"DocsURL": "https://drive.google.com/file/d/1QLJ4NwarYAMhH0uyhiUsZQV-zEzJ3Bv1/view?usp=sharing",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/daf5f2be63444221a65d31364b21f072",
+	"SupportURL": "https://leartes.atlassian.net/servicedesk/customer/portal/1",
+	"EngineVersion": "5.5.0",
+	"CanContainContent": true,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "LightingTool",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			]
+		},
+		{
+			"Name": "LightingGame",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			]
+		},
+		{
+			"Name": "CameraManager",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "HDRIBackdrop",
+			"Enabled": true
+		}
+	]
+}
