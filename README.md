@@ -59,33 +59,75 @@ Fluid levels are visualised using **Niagara particle effects** (`NS_FluidLevel`)
 
 ## How to Set It Up
 
-### Prerequisites
+> **Important:** Cloning this repo alone is not enough to run the project. The 3D environments and character assets are not stored in git (they are large binary files, some over 100 MB). You must install them separately from the Epic Games Launcher and Fab before opening the project. Follow every step below or the levels will be full of missing/pink assets.
 
-- **Unreal Engine 5.5** installed via the [Epic Games Launcher](https://store.epicgames.com/en-US/download)
-- A VR headset (optional — see [testing without VR](#testing-without-vr))
+### Step 1 — Install Unreal Engine 5.5
 
-### Marketplace Content (not included in the repo)
+Download and install the **Epic Games Launcher**, then install **Unreal Engine 5.5** from the Library tab.
 
-These asset packs are excluded from git because they can be downloaded free from the Epic Launcher. You need them for the factory environment to appear correctly:
+### Step 2 — Clone the Repository
 
-- Factory Exterior/Interior Bundle
-- Leartes Studios Office
-- Corridor Assets & Elevator Corridor
-- Vigilante Content
-- Quantum Character
-- Laboratory assets
-- Fab assets
-- UE Starter Content
-- VR Template
+```bash
+git clone https://github.com/akoSiThaesler/Temp3.git
+```
 
-Install each one via the **Unreal Engine → Library → Vault** section of the Epic Launcher and add them to this project.
+### Step 3 — Install Required Asset Packs
 
-### Opening the Project
+All of the packs below are **free**. For each one:
+1. Find it in the Epic Games Launcher under **Unreal Engine → Fab** or **Library → Vault**
+2. Click **Add to Project**
+3. Select this project (`Industry_4`) and engine version **5.5**
 
-1. Clone or download this repository
-2. Double-click `Industry_4.uproject`
-3. Unreal Engine will ask to compile the **LightingTool** plugin — click **Yes**
-4. Once the editor loads, open `Content/Main.umap`
+#### UE Built-in Content Packs
+These come with the engine — add them via **Edit → Plugins** or by adding a template:
+
+| Pack Name | Installs into | Why it's needed |
+|---|---|---|
+| Starter Content | `Content/StarterContent/` | Basic materials and meshes used across levels |
+| VR Template | `Content/VRTemplate/` | Core VR pawn, locomotion, and interaction framework |
+| First Person Template | `Content/FirstPerson/` + `Content/FirstPersonArms/` | Player character and arm animations |
+| Level Prototyping | `Content/LevelPrototyping/` | Modular geometry used in some areas |
+| MannequinsXR | `Content/Characters/` | VR-compatible player mannequin |
+
+To add these: open the project, go to **Edit → Add Feature or Content Pack**, and add **Virtual Reality** and **First Person** template content.
+
+#### Marketplace / Fab Packs
+Search for each by the exact name on **fab.com** or in the Epic Games Launcher Fab tab:
+
+| Pack Name (search exactly this) | Installs into | Used for |
+|---|---|---|
+| `Factory Exterior and Interior` | `Content/FactoryExteriorInteriorBundle/` | The factory building shell — walls, floors, ceiling |
+| `Leartes Studios - Office Environment` | `Content/LeartesStudiosOffice/` | Office/control room area of the factory |
+| `Modular Corridor` (or Corridor Assets) | `Content/CorridorAssets/` | Hallways connecting areas |
+| `Elevator and Corridor` | `Content/Elevator_corridor/` | Elevator area |
+| `Vigilante - Military Vehicles` | `Content/VigilanteContent/` | Exterior vehicle props |
+| `Quantum Character` | `Content/QuantumCharacter/` | NPC character model |
+| `Laboratory` | `Content/Laboratory/` | Laboratory level environment |
+
+#### Fab Free Assets (individual assets, not packs)
+These are individual free assets from fab.com. Search each name:
+
+| Asset Name | Installs into | Used for |
+|---|---|---|
+| `AC Motor` | `Content/Fab/AC_Motor/` | Pump motor 3D model |
+| `Emergency Stop Button` | `Content/Fab/Emergency_Stop_Button/` | E-Stop button model |
+| `Iconic Half-Life Red Valve` | `Content/Fab/Iconic_Half-Life_red_valve/` | Valve 3D model |
+| `Machinery Device` | `Content/Fab/Machinery_device/` | Industrial machinery props |
+| `Monitor` | `Content/Fab/Monitor/` | Wall monitor screen model |
+| `Poco Phone` | `Content/Fab/Poco_Phone/` | Handheld tablet model |
+| `Ultrawide Monitor` | `Content/Fab/Ultrawide_Monitor/` | Secondary monitor model |
+| Megascans surfaces | `Content/Fab/Megascans/` | Floor and wall surface materials |
+
+### Step 4 — Open the Project
+
+1. Double-click `Industry_4.uproject`
+2. Unreal Engine will ask to compile the **LightingTool** plugin — click **Yes**
+3. Wait for shaders to compile (this can take 10–30 minutes on first open)
+4. Open `Content/Main.umap`
+
+### Step 5 — Verify Everything Loaded
+
+In the editor, check the **Output Log** (Window → Output Log). If you see errors like `Asset not found` or references to any of the `Content/Fab/` or `Content/FactoryExterior...` paths, that asset pack was not installed correctly. Re-add it via the Epic Launcher and restart the editor.
 
 ---
 
