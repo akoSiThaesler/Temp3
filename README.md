@@ -1,136 +1,404 @@
-# Industry 4.0 – Kanban Production Simulator
+# Industry 4.0 – VR Production Facility Simulator
 
-A VR-enabled industrial facility simulator built in **Unreal Engine 5.5** for the DHBW TIF23A semester project. Players can monitor and control a simulated production line through interactable screens and a 6-camera CCTV system, using either VR (OpenXR) or desktop mode.
+A VR simulation of an industrial chemical production facility built in **Unreal Engine 5.5** as a DHBW TIF23A semester project. Users wear a VR headset and physically walk around a virtual factory, operate pumps and valves, manage production orders, monitor equipment via screens, and watch the facility through a 6-camera CCTV system.
 
 ---
 
-## Project Structure
+## Table of Contents
+
+1. [What This Project Is](#what-this-project-is)
+2. [What the Factory Simulates](#what-the-factory-simulates)
+3. [How to Set It Up](#how-to-set-it-up)
+4. [How to Run It](#how-to-run-it)
+5. [How the Production System Works](#how-the-production-system-works)
+6. [What You Can Do in VR](#what-you-can-do-in-vr)
+7. [Blueprint Architecture](#blueprint-architecture)
+8. [Levels](#levels)
+9. [The LightingTool Plugin](#the-lightingtool-plugin)
+10. [Project File Structure](#project-file-structure)
+11. [Configuration Reference](#configuration-reference)
+
+---
+
+## What This Project Is
+
+This is an **Unreal Engine 5.5 VR application**. There is no traditional source code — all logic is written in **Blueprints**, which are UE5's visual scripting system. When this document refers to "code", it means Blueprint assets (`.uasset` files) inside the `Content/Blueprints/` folder.
+
+The project starts in **VR mode by default**. A supported OpenXR headset (Meta Quest, HTC Vive, Valve Index, or Windows Mixed Reality) is required to use it as intended. It can also be tested without a headset using keyboard and mouse (see [How to Run It](#how-to-run-it)).
+
+---
+
+## What the Factory Simulates
+
+The simulation represents a **batch chemical production facility** — the kind used in industries like food processing, pharmaceuticals, or materials manufacturing. The factory has real industrial components:
 
 ```
-Content/
-├── Blueprints/
-│   ├── CCTV/                        # Security camera system
-│   ├── InteractableScreens/         # Monitor & Tablet UI actors
-│   │   └── Monitor/Screens/         # Individual screen widgets
-│   ├── Production/                  # Equipment actors & data
-│   └── Lights/                      # Day/Night cycle
-├── Materials/                       # Custom materials
-├── silo/                            # Custom silo 3D model
-├── WIS/                             # Showroom map assets
-├── __ExternalActors__/              # UE5 One-File-Per-Actor level data
-└── __ExternalObjects__/             # UE5 level object data
-Plugins/
-└── LightingTool/                    # Ultimate Lighting Tool (Leartes Studios)
+Raw Material Storage (Silo)
+         │
+         ▼  [Pump moves material]
+   Reactor Vessel  ◄── Recipe defines how to process it
+         │
+         ▼  [Valves control the output path]
+     Output / Completion
+```
+
+### Physical Equipment in the Factory
+
+| Equipment | Blueprint | What It Does |
+|---|---|---|
+| **Silo** | `BP_Silo` | Stores raw materials. Has a fluid level that drops as material is consumed. |
+| **Reactor** | `BP_Reactor` | The main processing vessel where the recipe is carried out. Tracks its own fluid level and state. |
+| **Pump** | `BP_Pump` | Moves fluid from the Silo into the Reactor. Can be turned on/off. |
+| **Valve** | `BP_Valve` | Controls which path fluid flows through. Can be opened or closed. |
+| **Pipes** | `BP_PipeVisualOnly` | Visual-only connections between equipment. Carry no logic — the pump and valves control actual flow. |
+| **Emergency Stop** | `BP_Emergency_Stop` | A large red button that immediately halts all production and resets equipment states. |
+
+Fluid levels are visualised using **Niagara particle effects** (`NS_FluidLevel`) — liquid visually rises and falls in the Silo and Reactor as production runs.
+
+---
+
+## How to Set It Up
+
+### Prerequisites
+
+- **Unreal Engine 5.5** installed via the [Epic Games Launcher](https://store.epicgames.com/en-US/download)
+- A VR headset (optional — see [testing without VR](#testing-without-vr))
+
+### Marketplace Content (not included in the repo)
+
+These asset packs are excluded from git because they can be downloaded free from the Epic Launcher. You need them for the factory environment to appear correctly:
+
+- Factory Exterior/Interior Bundle
+- Leartes Studios Office
+- Corridor Assets & Elevator Corridor
+- Vigilante Content
+- Quantum Character
+- Laboratory assets
+- Fab assets
+- UE Starter Content
+- VR Template
+
+Install each one via the **Unreal Engine → Library → Vault** section of the Epic Launcher and add them to this project.
+
+### Opening the Project
+
+1. Clone or download this repository
+2. Double-click `Industry_4.uproject`
+3. Unreal Engine will ask to compile the **LightingTool** plugin — click **Yes**
+4. Once the editor loads, open `Content/Main.umap`
+
+---
+
+## How to Run It
+
+### In VR (Default)
+
+Connect your VR headset, then press **Play** in the editor. The game launches directly into VR. The headset must be active before pressing Play.
+
+### Testing Without a Headset
+
+The game defaults to VR mode. To disable it:
+
+1. Open `Config/DefaultGame.ini`
+2. Find `bStartInVR=True` and change it to `bStartInVR=False`
+3. Press Play — the game runs in a regular window
+
+**Keyboard controls for desktop mode:**
+
+| Key | Action |
+|---|---|
+| `W A S D` | Move around |
+| `Q / E` | Move up / down |
+| `Mouse` | Look around |
+| `E` | Interact with objects (replaces VR trigger) |
+| `Tab` | Toggle spectator camera |
+
+---
+
+## How the Production System Works
+
+### The Three Data Structures
+
+The production system is built around three data types defined as Blueprint structs:
+
+**`STR_Recipe`** — a formula for making a product. Defines ingredients, ratios, processing parameters, duration, and temperature.
+
+**`STR_Order`** — a customer request. Contains what product is needed, how much, and a deadline.
+
+**`FSTR_PumpState` / `FSTR_ValveState`** — live equipment states. Track whether each pump is running and whether each valve is open or closed.
+
+### The Central Brain — `BP_FacilityDataManager`
+
+This is a single Blueprint actor placed in the Main level that acts as the **central data store for the entire simulation**. Every other system reads from and writes to it:
+
+- Stores the full recipe database
+- Tracks all active orders
+- Holds the current state of every pump and valve
+- Records production history
+
+Nothing talks to anything else directly. The monitor UI reads orders from `BP_FacilityDataManager`. The equipment actors report their state back to it. This keeps all systems decoupled.
+
+### A Full Production Run — Step by Step
+
+```
+1. Operator approaches the wall monitor (BP_InteractableMonitor)
+         │
+2. Opens the Orders screen (WBP_OrderUI)
+   → Sees a list of pending orders pulled from BP_FacilityDataManager
+         │
+3. Selects an order → opens WBP_OrderUIDetail
+   → Views what product is needed and in what quantity
+         │
+4. Navigates to Recipes (WBP_RecipeEntry / WBP_RecipeOrder)
+   → Selects or creates a recipe that matches the order
+         │
+5. Opens the Flow System screen (WBP_FlowSystem)
+   → Opens the correct valves (BP_Valve) for this production run
+   → Starts the pump (BP_Pump) to move material from Silo to Reactor
+         │
+6. Opens the Fluid Levels screen (WBP_FluidLevels)
+   → Watches the Silo level drop and Reactor level rise in real time
+         │
+7. Reactor processes the material (BP_Reactor runs its logic)
+         │
+8. Production completes
+   → Operator uses the CCTV screens to visually confirm equipment is idle
+   → Order is marked complete in BP_FacilityDataManager
+         │
+9. If anything goes wrong at any step:
+   → Operator hits the Emergency Stop button (BP_Emergency_Stop)
+   → All pumps stop, all valves reset
 ```
 
 ---
 
-## How It Works
+## What You Can Do in VR
 
-### Central Data Manager — `BP_FacilityDataManager`
+### VR Controller Mapping
 
-Everything flows through this single actor placed in the level. It holds the global state for the entire facility:
-
-- Active **orders** and **recipes** (using `STR_Order` and `STR_Recipe` data structures)
-- Current **equipment states** (`FSTR_PumpState`, `FSTR_ValveState`)
-- **Fluid levels** across silos and the reactor
-
-All UI widgets and equipment blueprints communicate with `BP_FacilityDataManager` rather than with each other directly, keeping systems decoupled.
-
----
-
-### Production Equipment
-
-Each piece of equipment is a self-contained Blueprint actor:
-
-| Blueprint | Role |
+| Button | Action |
 |---|---|
-| `BP_Pump` | Controls material flow between containers |
-| `BP_Reactor` | Processes materials according to a recipe |
-| `BP_Silo` | Stores raw or finished materials |
-| `BP_Valve` | Opens/closes flow paths between equipment |
-| `BP_Emergency_Stop` | Halts all production and resets states |
+| **Grip (both hands)** | Grab and hold objects |
+| **Right Trigger** | Interact / select |
+| **Left Trigger** | Secondary interact |
+| **Right Menu Button** | Toggle right UI panel |
+| **Left Menu Button** | Toggle left UI panel |
+| **Thumbstick** | Move through the environment |
 
-Pipes between equipment are visual-only (`BP_PipeVisualOnly`, `Bp_pipe_straight_Reactor_Silo`, etc.) and carry no logic — flow state is managed by the valves and pumps. Fluid levels are visualized using Niagara particle effects (`NS_FluidLevel`).
+A **VR laser pointer beam** (`NS_VRBeam` Niagara effect) extends from your controller so you can accurately point at screens and buttons from a distance.
 
----
+### Interactable Objects
 
-### Interactable Screens
+#### The Wall Monitor (`BP_InteractableMonitor`)
 
-Players interact with the facility through two physical actors in the level:
+The primary control interface. A large screen on the factory wall that the operator points at and activates. It has **10 switchable screens**:
 
-**`BP_InteractableMonitor`** — A wall-mounted monitor with a multi-screen UI:
-
-| Widget | Purpose |
+| Screen Widget | What It Shows / Does |
 |---|---|
-| `WBP_Home` | Dashboard overview |
-| `WBP_FluidLevels` | Live silo and reactor level display |
-| `WBP_FlowSystem` | Visual pipe/flow state diagram |
-| `WBP_OrderUI` / `WBP_OrderUIDetail` | Browse and manage production orders |
-| `WBP_RecipeCreation` / `WBP_RecipeEntry` | Create and edit recipes |
-| `WBP_RecipeOrder` | Submit an order for a recipe |
-| `WBP_ESResetFlushInv` | Emergency stop controls and inventory reset |
+| `WBP_Home` | Dashboard — overall facility status at a glance |
+| `WBP_OrderUI` | List of all active orders |
+| `WBP_OrderUIDetail` | Full details of one selected order |
+| `WBP_RecipeEntry` | Browse the recipe database |
+| `WBP_RecipeEntryDetail` | View full parameters of one recipe |
+| `WBP_RecipeCreation` | Create a brand new recipe |
+| `WBP_RecipeOrder` | Assign a recipe to an order |
+| `WBP_FluidLevels` | Live read-out of fluid levels in Silo and Reactor |
+| `WBP_FlowSystem` | Open/close valves, start/stop pumps |
+| `WBP_ESResetFlushInv` | Emergency stop controls and inventory flush/reset |
 
-**`BP_Tablet`** — A handheld tablet with a header navigation widget (`WBP_Header`), providing portable access to key screens.
+Navigation between screens uses 6 tab buttons along the top of the monitor (Tab1–Tab6 UI assets).
 
-Both actors implement `InteractionInterface`, the common interface that allows VR hand tracking and desktop click events to trigger the same interaction logic.
+#### The Handheld Tablet (`BP_Tablet`)
+
+A smaller portable device that can be picked up and carried around the factory. Displays a status header (`WBP_Header`) with key information. Useful for monitoring while walking around equipment.
+
+#### Physical Equipment
+
+All production equipment can be interacted with directly in VR:
+- **Pumps** — show visual feedback (spinning, sound) when running
+- **Valves** — physically open and close
+- **Emergency Stop** — a large red button mounted on the factory floor
+
+All interactable objects implement **`InteractionInterface`**, a shared Blueprint interface that standardises how VR hands and the keyboard `E` key trigger the same underlying logic.
+
+#### CCTV Monitors (`BP_CCTV`)
+
+Six cameras (`CCTV_CAM_1` through `CCTV_CAM_6`) are positioned around the factory. Their feeds are rendered to screen materials on monitors throughout the facility, giving the operator a bird's-eye view of multiple areas simultaneously.
 
 ---
 
-### CCTV System
+## Blueprint Architecture
 
-Six camera actors (`CCTV_CAM_1` through `CCTV_CAM_6`) feed into `BP_CCTV`, which renders their views to screen materials displayed on monitors in the facility. Each camera has its own render target material (`CCTV_CAM_*_Mat`).
+All custom logic lives in `Content/Blueprints/`. Here is a full breakdown:
 
----
+### Production (`Content/Blueprints/Production/`)
 
-### VR & Interaction
+The core simulation logic:
 
-The project starts in VR by default (`bStartInVR=True` in `DefaultGame.ini`). Input is handled via:
+```
+BP_FacilityDataManager  ← Central data hub (singleton actor in Main level)
+         │
+         ├── BP_Silo          (raw material storage + fluid level)
+         ├── BP_Reactor       (processing vessel + fluid level)
+         ├── BP_Pump          (fluid transfer, uses FSTR_PumpState)
+         ├── BP_Valve         (flow control, uses FSTR_ValveState)
+         ├── BP_Emergency_Stop (kills everything)
+         │
+         ├── STR_Order        (data structure: order definition)
+         ├── STR_Recipe       (data structure: recipe definition)
+         ├── FSTR_PumpState   (data structure: pump on/off state)
+         └── FSTR_ValveState  (data structure: valve open/closed state)
 
-- **OpenXR** for headset and controller tracking
-- **OpenXRHandTracking** for hand-based interaction
-- **OpenXREyeTracker** for gaze input
-- **NS_VRBeam** — a Niagara laser pointer effect for pointing at screens
+Visual effects:
+         ├── NS_FluidLevel    (Niagara: liquid in Silo/Reactor)
+         └── NS_VRBeam        (Niagara: VR controller laser pointer)
 
-To run in desktop mode, launch with `-nohmd` or disable `bStartInVR` in `Config/DefaultGame.ini`.
+Pipes (visual only, no logic):
+         ├── BP_PipeVisualOnly
+         ├── Bp_pipe_straight_Reactor_Silo
+         └── Bp_pipe_straight_Silo_Reactor
+```
 
----
+### Interactable Screens (`Content/Blueprints/InteractableScreens/`)
 
-### Lighting
+```
+BP_InteractableMonitor  ← Wall-mounted interactive actor
+└── WBP_InteractableMonitorDisplay  ← Container widget
+    ├── WBP_Home
+    ├── WBP_OrderUI
+    ├── WBP_OrderUIDetail
+    ├── WBP_RecipeEntry
+    ├── WBP_RecipeEntryDetail
+    ├── WBP_RecipeCreation
+    ├── WBP_RecipeOrder
+    ├── WBP_FluidLevels
+    ├── WBP_FlowSystem
+    └── WBP_ESResetFlushInv
 
-**`BP_DayNightLamps`** drives the day/night lighting cycle. The **LightingTool** plugin (Ultimate Lighting Tool v1.2.1 by Leartes Studios) provides the editor tooling for HDRI-based environment lighting and IES light profiles used across the facility.
+BP_Tablet  ← Handheld device
+└── WBP_Header  ← Status bar widget
+
+InteractionInterface  ← Shared interface implemented by all interactable actors
+```
+
+UI icon assets (stored in `MonitorImg/`): pump, reactor, silo, valve open/closed, tab buttons, primary/secondary button states.
+
+### CCTV (`Content/Blueprints/CCTV/`)
+
+```
+BP_CCTV  ← Camera controller
+├── CCTV_CAM_1  →  CCTV_CAM_1_Mat  (renders to screen material)
+├── CCTV_CAM_2  →  CCTV_CAM_2_Mat
+├── CCTV_CAM_3  →  CCTV_CAM_3_Mat
+├── CCTV_CAM_4  →  CCTV_CAM_4_Mat
+├── CCTV_CAM_5  →  CCTV_CAM_5_Mat
+└── CCTV_CAM_6  →  CCTV_CAM_6_Mat
+```
+
+### Lighting (`Content/Blueprints/Lights/`)
+
+```
+BP_DayNightLamps  ← Toggles ambient lighting between day and night states
+```
 
 ---
 
 ## Levels
 
-| Map | Purpose |
-|---|---|
-| `Main.umap` | Primary production facility — the main playable level |
-| `NpcWelt.umap` | NPC environment for future training scenarios |
-| `Laboratory.umap` | Lab environment |
-| `Playground.umap` | Developer sandbox for testing |
-| `Setup1.umap` | Initial configuration scene |
+| Map File | Actors | Purpose |
+|---|---|---|
+| `Content/Main.umap` | 8,047 | **The main game** — fully built factory with all equipment, monitors, CCTV, and props. This is what users experience. |
+| `Content/Setup1.umap` | 700 | Simplified version for onboarding or tutorial use |
+| `Content/Laboratory.umap` | 488 | Laboratory environment, likely for recipe testing scenarios |
+| `Content/NpcWelt.umap` | 139 | World with NPC positions — staff/worker simulation |
+| `Content/Playground.umap` | 44 | Minimal developer sandbox for testing individual features |
+
+> **Why are there 8,047 actors in Main?** UE5 uses a system called **One File Per Actor** where every object placed in a level (each prop, light, piece of equipment, wall, floor tile) is stored as its own small file in `Content/__ExternalActors__/`. This is normal and enables better teamwork — two people can place objects without git conflicts. Those 8,047 files are the entire contents of the factory floor.
 
 ---
 
-## Setup
+## The LightingTool Plugin
 
-1. Install **Unreal Engine 5.5** via the Epic Games Launcher
-2. Install marketplace content packs via the Launcher (these are not tracked in git):
-   - Factory Exterior/Interior Bundle
-   - Leartes Studios Office
-   - Vigilante Content, Corridor Assets, Elevator Corridor
-   - Quantum Character, Laboratory assets
-   - Fab assets, UE Starter Content, VR Template
-3. Open `Industry_4.uproject` — UE will prompt to compile the LightingTool plugin
-4. Open `Content/Main.umap` and press Play
+Located in `Plugins/LightingTool/`, this is the **Ultimate Lighting Tool v1.2.1** by Leartes Studios. It's a third-party editor plugin with three modules:
+
+### LightingTool (Editor Module)
+A lighting design tool used when building the levels. It provides a UI panel inside the UE editor to:
+- Manage lists of lights across the scene
+- Adjust light parameters in bulk
+- Preview day/night lighting configurations
+- Visualise light sensor data
+
+### LightingGame (Runtime Module)
+Runs at game time. Contains **`LTLightSensor`** — an actor that measures how bright a specific point in the scene is. Used to make gameplay respond to lighting conditions (e.g., detecting if an area is too dark).
+
+### CameraManager (Editor + Runtime Module)
+Manages camera presets and views. Provides:
+- Saved camera positions and settings (`CMCameraPresetData`)
+- A UI for switching between preset camera angles
+- Cinematics and fly-through support
+- Camera preset import/export
+
+This module drives the CCTV camera system and any pre-authored camera shots in the level.
 
 ---
 
-## Documentation
+## Project File Structure
 
-Full project documentation is in `/Documentation/`:
-- `DHBW_TIF23A_Industrie4.0.pdf` — main technical documentation
-- `Gruppe D - Industrie 4.0 Dokumentation.pdf` — semester deliverable
-- `UML.png` — system architecture diagram
+```
+Industry_4.uproject           ← Open this to launch the project in UE5
+│
+├── Config/
+│   ├── DefaultGame.ini       ← VR startup, game mode, compression settings
+│   ├── DefaultEngine.ini     ← Rendering (ray tracing, Nanite), streaming, VR
+│   ├── DefaultInput.ini      ← All VR controller and keyboard bindings
+│   └── DefaultEditorSettings.ini
+│
+├── Content/
+│   ├── Blueprints/           ← ALL custom game logic (64 blueprints)
+│   │   ├── Production/       ← Equipment actors and data structures
+│   │   ├── InteractableScreens/ ← Monitor, tablet, and all UI widgets
+│   │   ├── CCTV/            ← 6-camera security system
+│   │   └── Lights/          ← Day/night lighting controller
+│   ├── Materials/            ← Custom shared materials (glass, monitor screen)
+│   ├── silo/                 ← Custom 3D silo model (FBX + textures)
+│   ├── WIS/                  ← Showroom map assets
+│   ├── __ExternalActors__/   ← Level actor data (UE5 One-File-Per-Actor)
+│   └── __ExternalObjects__/  ← Level object data
+│
+├── Plugins/
+│   └── LightingTool/         ← Ultimate Lighting Tool plugin (C++ source included)
+│
+└── Documentation/
+    ├── DHBW_TIF23A_Industrie4.0.pdf     ← Full project documentation (German)
+    ├── Gruppe D - Industrie 4.0 Dokumentation.pdf  ← Semester deliverable
+    ├── UML.png                           ← System architecture diagram
+    └── UML-Info.docx                     ← Class structure notes
+```
+
+---
+
+## Configuration Reference
+
+### `Config/DefaultGame.ini` — Key Settings
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `GameDefaultMap` | `/Game/Main` | Opens Main.umap on launch |
+| `bStartInVR` | `True` | Auto-launches in VR mode |
+| `GameModeClassAlias` | `BP_FirstPersonGameMode` | Uses first-person VR character |
+
+### `Config/DefaultEngine.ini` — Key Settings
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `r.RayTracing` | Enabled | High-quality reflections and shadows |
+| `r.Nanite` | Enabled | High-polygon mesh rendering for detailed assets |
+| `r.TextureStreaming` | Enabled | Loads textures on demand (saves VRAM) |
+| `TextureStreamingPoolSize` | `1500` | MB reserved for streaming textures |
+
+### `Config/DefaultInput.ini` — VR Platforms Supported
+
+- Meta Quest (OculusTouch controllers)
+- HTC Vive
+- Valve Index
+- Windows Mixed Reality
